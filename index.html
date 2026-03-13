@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <title>Lista de la Compra</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="La Compra" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#111110" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Dieter Rams palette — warm off-black, cream whites, no decoration */
+    :root {
+      --bg:        #111110;
+      --bg2:       #1a1917;
+      --bg3:       #222220;
+      --line:      rgba(255,255,255,0.09);
+      --line2:     rgba(255,255,255,0.05);
+      --text1:     #ece8e0;
+      --text2:     #a09a90;
+      --text3:     #5a5650;
+      --text4:     #38352f;
+      --mono:      'DM Mono', monospace;
+      --sans:      'DM Sans', 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    body { background: var(--bg); font-family: var(--sans); overscroll-behavior-y: none; overflow: hidden; height: 100vh; }
+    #root { height: 100vh; overflow: hidden; }
+
+    /* Safe area for notch / Dynamic Island */
+    .safe-top {
+      padding-top: env(safe-area-inset-top);
+      background: var(--bg2);
+    }
+
+
+    input::placeholder { color: var(--text3); }
+    input, button { font-family: var(--sans); }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const STORES = ["Mercadona", "Consum"];
+    const TABS   = ["Mercadona", "Consum", "Todo"];
+
+    const COLOR_PRESETS = [
+      "#2d7a4f", "#c0392b", "#5b6fa6", "#c07a28",
+      "#1a7a7a", "#8e44ad", "#2e86ab", "#c0392b",
+      "#6d6d6d", "#a67c52", "#4a7c59", "#e8e0d0",
+    ];
+
+    function makeTabColor(hex) {
+      return { accent: hex, bg: `${hex}22`, border: `${hex}44` };
+    }
+
+    const DEFAULT_COLORS = {
+      Mercadona: makeTabColor("#2d7a4f"),
+      Consum:    makeTabColor("#c0392b"),
+      Todo:      makeTabColor("#5b6fa6"),
+    };
+
+    let nextId = Date.now();
+    let globalCloseMenu = null;
+
+    function ListaCompra() {
+      const [items, setItems] = useState(() => {
+        try { return JSON.parse(localStorage.getItem("lc_items") || "[]"); } catch { return []; }
+      });
+      const [activeTab, setActiveTab]     = useState("Mercadona");
+      const [input, setInput]             = useState("");
+      const [qty, setQty]                 = useState("1");
+      const [dragOverId, setDragOverId]   = useState(null);
+      const [draggingId, setDraggingId]   = useState(null);
+      const [tabColors, setTabColors]     = useState(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem("lc_colors") || "null");
+          return saved ? { ...DEFAULT_COLORS, ...saved } : DEFAULT_COLORS;
+        } catch { return DEFAULT_COLORS; }
+      });
+      const [colorPicker, setColorPicker] = useState(null);
+      const dragItemId     = useRef(null);
+      const listRef        = useRef(null);
+      const inputRef       = useRef(null);
+      const longPressTimer = useRef(null);
+
+      const visibleItems = activeTab === "Todo" ? items : items.filter(i => i.store === activeTab);
+      const pendingItems = visibleItems.filter(i => !i.done);
+      const doneItems    = visibleItems.filter(i => i.done);
+      const counts = {
+        Mercadona: items.filter(i => i.store === "Mercadona").length,
+        Consum:    items.filter(i => i.store === "Consum").length,
+        Todo:      items.length,
+      };
+
+      useEffect(() => { localStorage.setItem("lc_items", JSON.stringify(items)); }, [items]);
+      useEffect(() => { localStorage.setItem("lc_colors", JSON.stringify(tabColors)); }, [tabColors]);
+
+      function addItem() {
+        if (!input.trim()) return;
+        const store = activeTab === "Todo" ? "Mercadona" : activeTab;
+        setItems(prev => [...prev, { id: nextId++, name: input.trim(), qty, store, done: false }]);
+        setInput(""); setQty("1");
+        inputRef.current?.focus();
+      }
+
+      function toggleDone(id)        { setItems(p => p.map(i => i.id === id ? { ...i, done: !i.done } : i)); }
+      function deleteItem(id)         { setItems(p => p.filter(i => i.id !== id)); }
+      function updateQty(id, val)     { setItems(p => p.map(i => i.id === id ? { ...i, qty: val } : i)); }
+      function updateStore(id, store) { setItems(p => p.map(i => i.id === id ? { ...i, store } : i)); }
+
+      function clearDone() {
+        if (activeTab === "Todo") setItems(p => p.filter(i => !i.done));
+        else setItems(p => p.filter(i => !(i.store === activeTab && i.done)));
+      }
+
+      function reorder(fromId, toId) {
+        if (fromId == null || toId == null || fromId === toId) return;
+        setItems(prev => {
+          const arr = [...prev];
+          const fi = arr.findIndex(i => i.id === fromId), ti = arr.findIndex(i => i.id === toId);
+          if (fi === -1 || ti === -1) return prev;
+          const [m] = arr.splice(fi, 1);
+          arr.splice(ti, 0, m);
+          return arr;
+        });
+      }
+
+      // ── Touch drag ──
+      function onHandleTouchStart(e, id) {
+        e.stopPropagation();
+        dragItemId.current = id;
+        setDraggingId(id);
+      }
+      function onHandleTouchMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        // Find which row the finger is over
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        const row = el && el.closest("[data-item-id]");
+        if (row) {
+          const overId = Number(row.getAttribute("data-item-id"));
+          if (overId !== dragItemId.current) setDragOverId(overId);
+        }
+      }
+      function onHandleTouchEnd() {
+        reorder(dragItemId.current, dragOverId);
+        dragItemId.current = null;
+        setDraggingId(null);
+        setDragOverId(null);
+      }
+
+      // ── Mouse drag (desktop) ──
+      function onDragStart(id) { dragItemId.current = id; }
+      function onDragEnter(id) { if (id !== dragItemId.current) setDragOverId(id); }
+      function onDragEnd() {
+        reorder(dragItemId.current, dragOverId);
+        dragItemId.current = null; setDragOverId(null);
+      }
+
+      function startLongPress(tab) {
+        longPressTimer.current = setTimeout(() => setColorPicker(tab), 600);
+      }
+      function cancelLongPress() { clearTimeout(longPressTimer.current); }
+
+      function pickColor(tab, hex) {
+        setTabColors(prev => ({ ...prev, [tab]: makeTabColor(hex) }));
+        setColorPicker(null);
+      }
+
+      useEffect(() => {
+        if (!colorPicker) return;
+        function handle() { setColorPicker(null); }
+        const t = setTimeout(() => document.addEventListener("click", handle), 10);
+        return () => { clearTimeout(t); document.removeEventListener("click", handle); };
+      }, [colorPicker]);
+
+      const doneCount  = visibleItems.filter(i => i.done).length;
+      const totalCount = visibleItems.length;
+      const progress   = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
+      const tabColor   = tabColors[activeTab];
+
+      // Add bar height for padding — fixes overlap
+      const ADD_BAR_H = activeTab === "Todo" ? 130 : 105;
+
+      return (
+        <div style={{ height: "100vh", background: "var(--bg)", fontFamily: "var(--sans)", display: "flex", flexDirection: "column", maxWidth: "480px", margin: "0 auto", overflow: "hidden" }}>
+
+          {/* ── TABS ── */}
+          <div className="safe-top" style={{ position: "sticky", top: 0, zIndex: 20, borderBottom: "1px solid var(--line)" }}>
+            <div style={{ display: "flex" }}>
+              {TABS.map(tab => {
+                const active = tab === activeTab;
+                const col = tabColors[tab];
+                return (
+                  <div key={tab} style={{ flex: 1, position: "relative" }}>
+                    <button
+                      onClick={() => { cancelLongPress(); setActiveTab(tab); }}
+                      onMouseDown={() => startLongPress(tab)}
+                      onMouseUp={cancelLongPress}
+                      onMouseLeave={cancelLongPress}
+                      onTouchStart={() => startLongPress(tab)}
+                      onTouchEnd={cancelLongPress}
+                      style={{
+                        width: "100%",
+                        padding: "18px 8px 16px",
+                        background: "none",
+                        border: "none",
+                        borderBottom: active ? `2px solid ${col.accent}` : "2px solid transparent",
+                        color: active ? col.accent : "var(--text3)",
+                        fontSize: "15px",
+                        fontWeight: active ? "500" : "400",
+                        letterSpacing: "0.02em",
+                        cursor: "pointer",
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+                        userSelect: "none",
+                        transition: "color 0.2s, border-color 0.2s",
+                      }}
+                    >
+                      <span>{tab}</span>
+                      <span style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: "11px",
+                        color: active ? col.accent : "var(--text4)",
+                        letterSpacing: "0.05em",
+                      }}>{String(counts[tab]).padStart(2, "0")}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Progress bar — razor thin, Rams-style */}
+            <div style={{ height: "1px", background: "var(--line2)" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: tabColor.accent, transition: "width 0.5s ease" }} />
+            </div>
+
+            {/* Color picker */}
+            {colorPicker && (
+              <div onClick={e => e.stopPropagation()} style={{
+                position: "absolute", top: "calc(100% + 8px)", left: "50%",
+                transform: "translateX(-50%)",
+                background: "var(--bg3)",
+                border: "1px solid var(--line)",
+                borderRadius: "4px",
+                padding: "16px",
+                zIndex: 100,
+                boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+                width: "190px",
+              }}>
+                <p style={{ margin: "0 0 12px", fontSize: "11px", color: "var(--text3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  {colorPicker}
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+                  {COLOR_PRESETS.map(hex => {
+                    const isSelected = tabColors[colorPicker]?.accent === hex;
+                    return (
+                      <button key={hex} onClick={() => pickColor(colorPicker, hex)} style={{
+                        width: "30px", height: "30px",
+                        borderRadius: "2px",
+                        background: hex,
+                        border: isSelected ? "2px solid var(--text1)" : "1px solid rgba(255,255,255,0.1)",
+                        cursor: "pointer",
+                        transform: isSelected ? "scale(1.15)" : "scale(1)",
+                        transition: "transform 0.1s",
+                      }} />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── HEADER ── */}
+          <div style={{ padding: "16px 20px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line2)" }}>
+            <span style={{ fontFamily: "var(--mono)", fontSize: "12px", color: "var(--text3)", letterSpacing: "0.06em" }}>
+              {doneCount > 0 ? `${doneCount}/${totalCount}` : `${totalCount} producto${totalCount !== 1 ? "s" : ""}`}
+            </span>
+            {doneCount > 0 && (
+              <button onClick={clearDone} style={{
+                background: "none",
+                border: "1px solid var(--line)",
+                color: "var(--text3)",
+                padding: "4px 12px",
+                fontSize: "12px",
+                letterSpacing: "0.03em",
+                cursor: "pointer",
+                borderRadius: "2px",
+              }}>Limpiar ✓</button>
+            )}
+          </div>
+
+          {/* ── LIST ── */}
+          <div style={{ flex: 1, padding: "8px 16px", overflowY: "auto", paddingBottom: `${ADD_BAR_H + 16}px`, WebkitOverflowScrolling: "touch", overscrollBehavior: "none" }}>
+            {visibleItems.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "80px 20px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text4)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Lista vacía</div>
+                <div style={{ fontSize: "12px", color: "var(--text4)", letterSpacing: "0.06em" }}>Mantén pulsada una pestaña para cambiar su color</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {pendingItems.map((item, i) => (
+                  <ItemRow key={item.id} item={item} tabColors={tabColors}
+                    isLast={i === pendingItems.length - 1 && doneItems.length === 0}
+                    onToggle={toggleDone} onDelete={deleteItem} onQty={updateQty} onStore={updateStore}
+                    isDragOver={dragOverId === item.id}
+                    isDragging={draggingId === item.id}
+                    onDragStart={onDragStart} onDragEnter={onDragEnter} onDragEnd={onDragEnd}
+                    onHandleTouchStart={onHandleTouchStart}
+                    onHandleTouchMove={onHandleTouchMove}
+                    onHandleTouchEnd={onHandleTouchEnd}
+                  />
+                ))}
+                {doneItems.length > 0 && (
+                  <>
+                    <div style={{ fontSize: "11px", color: "var(--text4)", padding: "16px 0 8px", letterSpacing: "0.1em", textTransform: "uppercase", borderTop: pendingItems.length > 0 ? "1px solid var(--line2)" : "none", marginTop: pendingItems.length > 0 ? "8px" : "0" }}>
+                      Completados
+                    </div>
+                    {doneItems.map((item, i) => (
+                      <ItemRow key={item.id} item={item} tabColors={tabColors}
+                        isLast={i === doneItems.length - 1}
+                        onToggle={toggleDone} onDelete={deleteItem} onQty={updateQty} onStore={updateStore}
+                        isDragOver={dragOverId === item.id}
+                        isDragging={draggingId === item.id}
+                        onDragStart={onDragStart} onDragEnter={onDragEnter} onDragEnd={onDragEnd}
+                        onHandleTouchStart={onHandleTouchStart}
+                        onHandleTouchMove={onHandleTouchMove}
+                        onHandleTouchEnd={onHandleTouchEnd}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── ADD BAR ── */}
+          <div style={{
+            position: "fixed", bottom: 0, left: 0, right: 0,
+            background: "var(--bg2)",
+            borderTop: "1px solid var(--line)",
+            paddingTop: "14px",
+            paddingLeft: "24px",
+            paddingRight: "24px",
+            paddingBottom: "max(env(safe-area-inset-bottom), 40px)",
+            zIndex: 10,
+          }}>
+            {activeTab === "Todo" && (
+              <p style={{ fontSize: "11px", color: "var(--text4)", margin: "0 0 8px", letterSpacing: "0.04em" }}>
+                Se añadirá a Mercadona
+              </p>
+            )}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                ref={inputRef} value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addItem()}
+                placeholder="Añadir producto..."
+                style={{
+                  flex: 1, background: "var(--bg3)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "3px",
+                  padding: "14px 16px",
+                  color: "var(--text1)",
+                  fontSize: "17px",
+                  outline: "none",
+                  letterSpacing: "0.01em",
+                }}
+              />
+              {/* Qty stepper */}
+              <div style={{ display: "flex", alignItems: "center", background: "var(--bg3)", border: "1px solid var(--line)", borderRadius: "3px", overflow: "hidden", flexShrink: 0 }}>
+                <button onClick={() => setQty(q => String(Math.max(1, Number(q) - 1)))} style={{ background: "none", border: "none", color: "var(--text2)", fontSize: "20px", width: "34px", height: "50px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                <span style={{ fontFamily: "var(--mono)", color: "var(--text1)", fontSize: "16px", minWidth: "22px", textAlign: "center" }}>{qty}</span>
+                <button onClick={() => setQty(q => String(Number(q) + 1))} style={{ background: "none", border: "none", color: "var(--text2)", fontSize: "20px", width: "34px", height: "50px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+              </div>
+              {/* Add button */}
+              <button onClick={addItem} style={{
+                background: tabColor.accent,
+                border: "none",
+                borderRadius: "3px",
+                width: "50px", height: "50px",
+                color: "white",
+                fontSize: "24px",
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+                letterSpacing: "-1px",
+              }}>+</button>
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    function ItemRow({ item, tabColors, isLast, onToggle, onDelete, onQty, onStore, isDragOver, isDragging, onDragStart, onDragEnter, onDragEnd, onHandleTouchStart, onHandleTouchMove, onHandleTouchEnd }) {
+      const [showMenu, setShowMenu] = useState(false);
+      const storeColor = tabColors[item.store];
+
+      function closeMenu() { setShowMenu(false); }
+      function openMenu(e) {
+        e.stopPropagation();
+        if (showMenu) { closeMenu(); return; }
+        if (globalCloseMenu) globalCloseMenu();
+        globalCloseMenu = closeMenu;
+        setShowMenu(true);
+      }
+
+      useEffect(() => {
+        if (!showMenu) return;
+        function handle() { closeMenu(); globalCloseMenu = null; }
+        const t = setTimeout(() => document.addEventListener("click", handle), 10);
+        return () => { clearTimeout(t); document.removeEventListener("click", handle); };
+      }, [showMenu]);
+
+      return (
+        <div
+          data-item-id={item.id}
+          draggable
+          onDragStart={() => onDragStart(item.id)}
+          onDragEnter={() => onDragEnter(item.id)}
+          onDragEnd={onDragEnd}
+          onDragOver={e => e.preventDefault()}
+          style={{
+            position: "relative",
+            zIndex: showMenu ? 100 : 1,
+            display: "flex", alignItems: "center", gap: "12px",
+            padding: "14px 0",
+            borderBottom: isLast ? "none" : "1px solid var(--line2)",
+            background: isDragOver ? "rgba(255,255,255,0.05)" : "transparent",
+            opacity: isDragging ? 0.35 : 1,
+            transition: "background 0.15s, opacity 0.15s",
+          }}
+        >
+          {/* Drag handle — invisible touch area + visual line */}
+          <div
+            onTouchStart={e => onHandleTouchStart(e, item.id)}
+            onTouchMove={onHandleTouchMove}
+            onTouchEnd={onHandleTouchEnd}
+            style={{
+              position: "relative", flexShrink: 0,
+              width: "20px", height: "40px",
+              touchAction: "none", cursor: "grab",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <div style={{
+              width: "2px", height: "14px", borderRadius: "1px",
+              background: item.done ? "var(--line)" : storeColor.accent,
+              transition: "background 0.2s",
+              pointerEvents: "none",
+            }} />
+          </div>
+
+          {/* Checkbox */}
+          <button onClick={() => onToggle(item.id)} style={{
+            width: "24px", height: "24px",
+            border: `1px solid ${item.done ? storeColor.accent : "var(--line)"}`,
+            borderRadius: "2px",
+            background: item.done ? storeColor.accent : "transparent",
+            cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "13px", color: "var(--bg)", flexShrink: 0,
+            transition: "all 0.2s",
+          }}>
+            {item.done ? "✓" : ""}
+          </button>
+
+          {/* Name */}
+          <span style={{
+            flex: 1,
+            fontSize: "17px",
+            fontWeight: "300",
+            letterSpacing: "0.01em",
+            color: item.done ? "var(--text4)" : "var(--text1)",
+            textDecoration: item.done ? "line-through" : "none",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{item.name}</span>
+
+          {/* Qty stepper */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0", flexShrink: 0 }}>
+            <button onClick={e => { e.stopPropagation(); onQty(item.id, String(Math.max(1, Number(item.qty) - 1))); }} style={{ background: "none", border: "none", color: item.done ? "var(--text4)" : "var(--text3)", fontSize: "18px", width: "28px", height: "32px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+            <span style={{ fontFamily: "var(--mono)", color: item.done ? "var(--text4)" : "var(--text2)", fontSize: "14px", minWidth: "20px", textAlign: "center" }}>{item.qty}</span>
+            <button onClick={e => { e.stopPropagation(); onQty(item.id, String(Number(item.qty) + 1)); }} style={{ background: "none", border: "none", color: item.done ? "var(--text4)" : "var(--text3)", fontSize: "18px", width: "28px", height: "32px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+          </div>
+
+          {/* Store toggle */}
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button onClick={openMenu} style={{
+              background: "none", border: "none",
+              color: showMenu ? storeColor.accent : "var(--text4)",
+              cursor: "pointer", fontSize: "16px",
+              padding: "4px 6px", display: "flex", alignItems: "center",
+              transition: "color 0.15s",
+            }}>⇄</button>
+
+            {showMenu && (
+              <div onClick={e => e.stopPropagation()} style={{
+                position: "absolute", right: 0, top: "calc(100% + 4px)",
+                width: "148px",
+                background: "var(--bg3)",
+                border: "1px solid var(--line)",
+                borderRadius: "3px",
+                overflow: "hidden",
+                zIndex: 9999,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+              }}>
+                {STORES.map((s, i) => {
+                  const col = tabColors[s];
+                  const isCurrent = s === item.store;
+                  return (
+                    <button key={s} onClick={() => { onStore(item.id, s); closeMenu(); globalCloseMenu = null; }} style={{
+                      display: "flex", alignItems: "center", gap: "10px",
+                      width: "100%", padding: "13px 14px",
+                      background: isCurrent ? col.bg : "transparent",
+                      border: "none",
+                      borderBottom: i < STORES.length - 1 ? "1px solid var(--line2)" : "none",
+                      color: isCurrent ? col.accent : "var(--text2)",
+                      fontSize: "15px",
+                      fontWeight: isCurrent ? "500" : "300",
+                      cursor: "pointer", textAlign: "left",
+                      letterSpacing: "0.01em",
+                    }}>
+                      <span style={{ width: "6px", height: "6px", borderRadius: "1px", background: col.accent, flexShrink: 0 }} />
+                      {s}
+                      {isCurrent && <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: "11px" }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Delete */}
+          <button onClick={() => onDelete(item.id)} style={{
+            background: "none", border: "none",
+            color: "var(--text4)",
+            cursor: "pointer", fontSize: "15px", padding: "2px 4px", flexShrink: 0,
+          }}>✕</button>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<ListaCompra />, document.getElementById("root"));
+  </script>
+</body>
+</html>
