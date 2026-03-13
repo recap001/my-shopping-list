@@ -39,6 +39,7 @@
     .safe-top {
       padding-top: env(safe-area-inset-top);
       background: var(--bg2);
+      border-bottom: 1px solid var(--line);
     }
 
 
@@ -59,9 +60,9 @@
     const TABS   = ["Mercadona", "Consum", "Todo"];
 
     const COLOR_PRESETS = [
-      "#2d7a4f", "#c0392b", "#5b6fa6", "#c07a28",
-      "#1a7a7a", "#8e44ad", "#2e86ab", "#c0392b",
-      "#6d6d6d", "#a67c52", "#4a7c59", "#e8e0d0",
+      "#B8860B", "#7BA08A", "#C4956A", "#A0522D",
+      "#6B5744", "#2d7a4f", "#c0392b", "#5b6fa6",
+      "#8e44ad", "#1a7a7a", "#6d6d6d", "#2C1F0E",
     ];
 
     function makeTabColor(hex) {
@@ -69,9 +70,9 @@
     }
 
     const DEFAULT_COLORS = {
-      Mercadona: makeTabColor("#2d7a4f"),
-      Consum:    makeTabColor("#c0392b"),
-      Todo:      makeTabColor("#5b6fa6"),
+      Mercadona: makeTabColor("#7BA08A"),
+      Consum:    makeTabColor("#C4956A"),
+      Todo:      makeTabColor("#B8860B"),
     };
 
     let nextId = Date.now();
@@ -256,7 +257,7 @@
                 transform: "translateX(-50%)",
                 background: "var(--bg3)",
                 border: "1px solid var(--line)",
-                borderRadius: "4px",
+                borderRadius: "20px",
                 padding: "16px",
                 zIndex: 100,
                 boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
@@ -271,7 +272,7 @@
                     return (
                       <button key={hex} onClick={() => pickColor(colorPicker, hex)} style={{
                         width: "30px", height: "30px",
-                        borderRadius: "2px",
+                        borderRadius: "50%",
                         background: hex,
                         border: isSelected ? "2px solid var(--text1)" : "1px solid rgba(255,255,255,0.1)",
                         cursor: "pointer",
@@ -374,7 +375,7 @@
                 style={{
                   flex: 1, minWidth: 0, background: "var(--bg3)",
                   border: "1px solid var(--line)",
-                  borderRadius: "3px",
+                  borderRadius: "16px",
                   padding: "14px 16px",
                   color: "var(--text1)",
                   fontSize: "17px",
@@ -383,7 +384,7 @@
                 }}
               />
               {/* Qty stepper */}
-              <div style={{ display: "flex", alignItems: "center", background: "var(--bg3)", border: "1px solid var(--line)", borderRadius: "3px", overflow: "hidden", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", background: "var(--bg3)", border: "1px solid var(--line)", borderRadius: "16px", overflow: "hidden", flexShrink: 0 }}>
                 <button onClick={() => setQty(q => String(Math.max(1, Number(q) - 1)))} style={{ background: "none", border: "none", color: "var(--text2)", fontSize: "20px", width: "34px", height: "50px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
                 <span style={{ fontFamily: "var(--mono)", color: "var(--text1)", fontSize: "16px", minWidth: "22px", textAlign: "center" }}>{qty}</span>
                 <button onClick={() => setQty(q => String(Number(q) + 1))} style={{ background: "none", border: "none", color: "var(--text2)", fontSize: "20px", width: "34px", height: "50px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
@@ -392,7 +393,7 @@
               <button onClick={addItem} style={{
                 background: tabColor.accent,
                 border: "none",
-                borderRadius: "3px",
+                borderRadius: "16px",
                 width: "50px", height: "50px",
                 color: "white",
                 fontSize: "24px",
@@ -460,7 +461,7 @@
             }}
           >
             <div style={{
-              width: "2px", height: "14px", borderRadius: "1px",
+              width: "2px", height: "14px", borderRadius: "2px",
               background: item.done ? "var(--line)" : storeColor.accent,
               transition: "background 0.2s",
               pointerEvents: "none",
@@ -471,7 +472,7 @@
           <button onClick={() => onToggle(item.id)} style={{
             width: "24px", height: "24px",
             border: `1px solid ${item.done ? storeColor.accent : "var(--line)"}`,
-            borderRadius: "2px",
+            borderRadius: "6px",
             background: item.done ? storeColor.accent : "transparent",
             cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -515,7 +516,7 @@
                 width: "148px",
                 background: "var(--bg3)",
                 border: "1px solid var(--line)",
-                borderRadius: "3px",
+                borderRadius: "16px",
                 overflow: "hidden",
                 zIndex: 9999,
                 boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
